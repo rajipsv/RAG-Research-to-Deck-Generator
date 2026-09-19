@@ -1,0 +1,13 @@
+node_modules/
+.next/
+.env
+.env.local
+worker/output/*.pptx
+worker/pipeline/__pycache__/
+worker/pipeline/.venv/
+.venv/
+*.pyc
+*.tsbuildinfo
+
+# Claude Code tooling/skills installed locally — not part of this app
+.claude/

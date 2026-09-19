@@ -1,0 +1,16 @@
+Session Deliverable: Portfolio P3 — Research-to-Deck Generator
+W04 SESSION DELIVERABLE · Portfolio: RAG + Generator
+
+🏆 Portfolio P3 — Research-to-Deck Generator
+
+RAG over 50+ papers via Semantic Scholar API → synthesise findings → auto-generate branded PPTX with citations using python-pptx.
+Next.js API route. Deploy to Vercel. Share live URL.
+This is the core pipeline powering deep-research.intelliforge.tech.
+
+ARCHITECTURE
+Ingestion: Semantic Scholar API → fetch PDFs → chunk → embed → pgvector
+RAG: Multi-query RAG with re-ranking to surface highest-signal findings
+Synthesis: Claude generates slide titles, bullets, citation mappings
+PPTX: python-pptx assembles branded deck with speaker notes
+API: Next.js route handler POST topic → BullMQ job → download link
+BUSINESS IMPACT: Turns 3 days of research into 5 minutes
