@@ -1,13 +1,14 @@
-"""Claude synthesis: findings -> slide titles, bullets, and citation mapping."""
+"""Cohere synthesis: findings -> slide titles, bullets, and citation mapping."""
 
 from __future__ import annotations
 
 import json
+import os
 import re
 
-import anthropic
+import cohere
 
-SYNTHESIS_MODEL = "claude-sonnet-5"
+SYNTHESIS_MODEL = "command-r-plus-08-2024"
 
 SYSTEM_PROMPT = (
     "You are a research analyst preparing a slide deck from academic literature. "
@@ -70,14 +71,17 @@ def synthesize_deck(topic: str, findings: list[dict]) -> dict:
         "supports it. Do not use an index that was not given above."
     )
 
-    client = anthropic.Anthropic()
-    response = client.messages.create(
+    client = cohere.ClientV2(api_key=os.environ["COHERE_API_KEY"])
+    response = client.chat(
         model=SYNTHESIS_MODEL,
         max_tokens=4000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_prompt}],
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
     )
-    raw_text = response.content[0].text.strip()
+    raw_text = response.message.content[0].text.strip()
 
     match = re.search(r"\{.*\}", raw_text, re.DOTALL)
     if not match:

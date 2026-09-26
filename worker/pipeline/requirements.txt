@@ -1,7 +1,6 @@
 requests>=2.31
 psycopg2-binary>=2.9
 pgvector>=0.2.5
-anthropic>=0.39
-voyageai>=0.2.3
+cohere>=5.13
 python-pptx>=1.0.2
 numpy>=1.26

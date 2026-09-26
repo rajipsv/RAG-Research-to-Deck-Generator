@@ -13,13 +13,13 @@ CREATE TABLE IF NOT EXISTS papers (
   url TEXT
 );
 
--- voyage-3-lite embeddings are 512-dimensional; update this if you swap models.
+-- Cohere embed-english-v3.0 embeddings are 1024-dimensional; update this if you swap models.
 CREATE TABLE IF NOT EXISTS chunks (
   id SERIAL PRIMARY KEY,
   paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
   chunk_index INT NOT NULL,
   content TEXT NOT NULL,
-  embedding vector(512) NOT NULL
+  embedding vector(1024) NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS chunks_embedding_idx

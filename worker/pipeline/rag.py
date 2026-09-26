@@ -12,13 +12,14 @@ every query.
 from __future__ import annotations
 
 import json
+import os
 
-import anthropic
+import cohere
 
 from embeddings import embed_query
 from db import search_similar
 
-SUBQUERY_MODEL = "claude-sonnet-5"
+SUBQUERY_MODEL = "command-r-plus-08-2024"
 
 SUBQUERY_ANGLES = [
     "core methods and approaches",
@@ -29,8 +30,8 @@ SUBQUERY_ANGLES = [
 
 
 def generate_subqueries(topic: str) -> list[str]:
-    """Ask Claude for angle-specific search queries; fall back to fixed angles on failure."""
-    client = anthropic.Anthropic()
+    """Ask Cohere for angle-specific search queries; fall back to fixed angles on failure."""
+    client = cohere.ClientV2(api_key=os.environ["COHERE_API_KEY"])
     prompt = (
         f"Topic: {topic}\n\n"
         "Write 4 short search queries (3-6 words each) that would each surface "
@@ -39,12 +40,12 @@ def generate_subqueries(topic: str) -> list[str]:
         "4 strings, nothing else."
     )
     try:
-        response = client.messages.create(
+        response = client.chat(
             model=SUBQUERY_MODEL,
             max_tokens=200,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = response.content[0].text.strip()
+        text = response.message.content[0].text.strip()
         queries = json.loads(text)
         if isinstance(queries, list) and len(queries) >= 2:
             return [str(q) for q in queries[:4]]
