@@ -140,7 +140,9 @@ export default function Home() {
           {isWorking && (
             <div className="status-row">
               <span className="spinner" />
-              <span>{stageLabel("progress" in status! ? status.progress : undefined)}</span>
+              <span>
+                {stageLabel(status && "progress" in status ? status.progress : undefined)}
+              </span>
             </div>
           )}
 
