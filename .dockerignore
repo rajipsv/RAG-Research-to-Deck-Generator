@@ -1,0 +1,13 @@
+node_modules
+.next
+.venv
+worker/pipeline/__pycache__
+worker/pipeline/.venv
+worker/output
+.git
+.vercel
+.kilo
+.env
+.env.local
+*.tsbuildinfo
+app

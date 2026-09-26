@@ -33,4 +33,5 @@ export type PipelineResult = {
   filename: string;
   paperCount: number;
   slideCount: number;
+  downloadUrl: string;
 };

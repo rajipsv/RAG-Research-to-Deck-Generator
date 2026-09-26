@@ -16,7 +16,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from semantic_scholar import fetch_papers
+from openalex import fetch_papers
 from ingestion import chunk_text
 from embeddings import embed_documents
 from db import get_connection, upsert_paper, replace_chunks
@@ -38,7 +38,7 @@ def main() -> None:
     job_id = sys.argv[2]
 
     log_stage("ingestion:start")
-    papers = fetch_papers(topic, os.environ.get("SEMANTIC_SCHOLAR_API_KEY"))
+    papers = fetch_papers(topic)
     if len(papers) < 10:
         print(
             f"WARN: only found {len(papers)} papers with abstracts for topic '{topic}'",

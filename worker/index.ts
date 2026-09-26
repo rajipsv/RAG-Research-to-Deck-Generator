@@ -1,8 +1,10 @@
 import { Worker, Job } from "bullmq";
 import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import IORedis from "ioredis";
+import { put } from "@vercel/blob";
 import { QUEUE_NAME, PipelineResult } from "../lib/queue";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -13,12 +15,15 @@ const connection = new IORedis(process.env.REDIS_URL || "redis://localhost:6379"
 
 const PYTHON_BIN = process.env.PYTHON_BIN || "python";
 const PIPELINE_SCRIPT = path.join(__dirname, "pipeline", "run_pipeline.py");
+const OUTPUT_DIR = path.join(__dirname, "output");
+
+type RawPipelineResult = Omit<PipelineResult, "downloadUrl">;
 
 function runPipeline(
   topic: string,
   jobId: string,
   onStage: (stage: string) => void
-): Promise<PipelineResult> {
+): Promise<RawPipelineResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(PYTHON_BIN, [PIPELINE_SCRIPT, topic, jobId], {
       env: process.env,
@@ -58,7 +63,7 @@ function runPipeline(
         return;
       }
       try {
-        resolve(JSON.parse(lastLine) as PipelineResult);
+        resolve(JSON.parse(lastLine) as RawPipelineResult);
       } catch {
         reject(new Error(`could not parse pipeline output as JSON: ${lastLine}`));
       }
@@ -66,13 +71,30 @@ function runPipeline(
   });
 }
 
+// The pipeline writes the .pptx to local disk, but the worker (Fly) and the
+// API (Vercel) don't share a filesystem, and Fly's disk is ephemeral anyway.
+// Upload it to Vercel Blob so the API can hand back a stable, public URL,
+// then remove the local copy.
+async function uploadAndCleanup(raw: RawPipelineResult): Promise<PipelineResult> {
+  const localPath = path.join(OUTPUT_DIR, raw.filename);
+  const fileBuffer = await fs.readFile(localPath);
+  const blob = await put(raw.filename, fileBuffer, {
+    access: "public",
+    contentType:
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  });
+  await fs.unlink(localPath).catch(() => {});
+  return { ...raw, downloadUrl: blob.url };
+}
+
 const worker = new Worker(
   QUEUE_NAME,
   async (job: Job) => {
     const { topic } = job.data as { topic: string };
-    return runPipeline(topic, String(job.id), (stage) => {
+    const raw = await runPipeline(topic, String(job.id), (stage) => {
       job.updateProgress({ stage });
     });
+    return uploadAndCleanup(raw);
   },
   { connection, concurrency: 1 }
 );

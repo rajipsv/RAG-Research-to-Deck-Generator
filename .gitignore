@@ -11,3 +11,6 @@ worker/pipeline/.venv/
 
 # Claude Code tooling/skills installed locally — not part of this app
 .claude/
+
+.vercel
+.env*

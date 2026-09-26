@@ -1,0 +1,21 @@
+# Deploys the BullMQ worker (worker/index.ts + the Python RAG/deck pipeline)
+# as an always-on background process. NOT the Next.js API — that's on Vercel.
+#
+# First time: `fly apps create <a-unique-name>` then update `app` below (or
+# just run `fly launch --no-deploy` from the repo root and let it fill this
+# in), then `fly secrets set ANTHROPIC_API_KEY=... VOYAGE_API_KEY=... \
+# DATABASE_URL=... REDIS_URL=... BLOB_READ_WRITE_TOKEN=...`, then `fly deploy`.
+app = "rag-research-to-deck-worker"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# No [[services]]/[http_service] block on purpose: this app doesn't accept
+# inbound HTTP traffic, it just polls Redis for jobs. Omitting it keeps the
+# machine running continuously instead of Fly treating it as an idle HTTP
+# service to autostop.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

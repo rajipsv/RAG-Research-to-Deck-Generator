@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDeckQueue, PipelineResult } from "@/lib/queue";
-import fs from "node:fs";
-import path from "node:path";
 
 export async function GET(
   _req: NextRequest,
@@ -15,18 +13,12 @@ export async function GET(
   }
 
   const result = job.returnvalue as PipelineResult;
-  const filePath = path.join(process.cwd(), "worker", "output", result.filename);
-
-  if (!fs.existsSync(filePath)) {
-    return NextResponse.json({ error: "Deck file is missing on disk." }, { status: 404 });
+  if (!result.downloadUrl) {
+    return NextResponse.json({ error: "Deck file is missing." }, { status: 404 });
   }
 
-  const fileBuffer = fs.readFileSync(filePath);
-  return new NextResponse(new Uint8Array(fileBuffer), {
-    headers: {
-      "Content-Type":
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      "Content-Disposition": `attachment; filename="${result.filename}"`,
-    },
-  });
+  // The worker (Fly) uploaded the .pptx to Vercel Blob since it doesn't
+  // share a filesystem with this (Vercel) API process; just hand the client
+  // straight to it.
+  return NextResponse.redirect(result.downloadUrl);
 }
