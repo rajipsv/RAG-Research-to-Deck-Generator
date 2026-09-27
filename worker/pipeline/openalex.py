@@ -1,35 +1,41 @@
 """OpenAlex paper search.
 
-Uses the OpenAlex Works API's search endpoint. Like Semantic Scholar, we
-fetch abstracts rather than full PDF text: not all matching works have an
-open-access PDF, and PDF download + text extraction is unreliable enough
-(paywalls, scanned images, broken layouts) that it would make ingestion the
-flakiest part of the pipeline. Abstracts are available for the large
-majority of results and are already dense summaries, which suits
-RAG-over-findings well.
+Uses the OpenAlex Works API's search endpoint. OpenAlex doesn't return
+plain abstract text — it returns an "inverted index" (word -> positions),
+presumably to save bandwidth — so we reconstruct the text before handing
+results back. Output is normalized to a shape the rest of the pipeline
+expects (paperId, title, abstract, pdfUrl, year, authors, url).
 
-OpenAlex doesn't return plain abstract text — it returns an "inverted
-index" (word -> positions), presumably to save bandwidth — so we
-reconstruct the text before handing results back. Output is normalized to
-the same shape the rest of the pipeline already expects (paperId, title,
-abstract, year, authors, url), so db.py/synthesis.py/deck.py need no
-changes.
-
-Swap in PDF extraction later (via `primary_location.pdf_url`) if full-text
-depth is needed.
+Where an open-access PDF is available (`primary_location.pdf_url`), the
+pipeline fetches and extracts its full text for ingestion instead of just
+the abstract — see `fetch_pdf_text`. This is deliberately best-effort: PDF
+download + extraction is unreliable (paywalls, scanned images, broken
+layouts), so any failure just falls back to the abstract rather than
+failing the run.
 """
 
 from __future__ import annotations
 
+import io
+import logging
 import os
 import time
 from typing import Optional
 
 import requests
+from pypdf import PdfReader
+
+# Most pdf_url links resolve to an HTML landing page (paywall, cookie
+# banner, redirect) rather than a raw PDF — that's expected and handled by
+# fetch_pdf_text's fallback to the abstract, so pypdf's per-failure warnings
+# would just spam the worker's logs across most of a 60-paper run.
+logging.getLogger("pypdf").setLevel(logging.CRITICAL)
 
 BASE_URL = "https://api.openalex.org/works"
 SELECT_FIELDS = "id,title,abstract_inverted_index,publication_year,authorships,primary_location,doi"
 MAX_CONSECUTIVE_RATE_LIMITS = 6  # ~6-30s of backoff before giving up on this page
+PDF_FETCH_TIMEOUT = 20
+PDF_MAX_PAGES = 40
 
 
 def _reconstruct_abstract(inverted_index: Optional[dict]) -> Optional[str]:
@@ -51,15 +57,40 @@ def _normalize(work: dict) -> dict:
         for a in work.get("authorships", [])
         if a.get("author", {}).get("display_name")
     ]
-    url = (work.get("primary_location") or {}).get("landing_page_url") or work.get("doi")
+    primary_location = work.get("primary_location") or {}
+    url = primary_location.get("landing_page_url") or work.get("doi")
     return {
         "paperId": work.get("id"),
         "title": work.get("title"),
         "abstract": _reconstruct_abstract(work.get("abstract_inverted_index")),
+        "pdfUrl": primary_location.get("pdf_url"),
         "year": work.get("publication_year"),
         "authors": authors,
         "url": url,
     }
+
+
+def fetch_pdf_text(pdf_url: str) -> Optional[str]:
+    """Download a PDF and extract its text. Returns None on any failure —
+    full text is a bonus on top of the abstract, never a hard requirement."""
+    try:
+        resp = requests.get(
+            pdf_url,
+            timeout=PDF_FETCH_TIMEOUT,
+            headers={"User-Agent": "Mozilla/5.0 (research-deck-worker)"},
+        )
+        resp.raise_for_status()
+        reader = PdfReader(io.BytesIO(resp.content))
+        pages = reader.pages[:PDF_MAX_PAGES]
+        text = "\n".join(page.extract_text() or "" for page in pages)
+        # pypdf occasionally emits NUL bytes from malformed font/encoding
+        # tables — Postgres text columns reject them outright (ValueError:
+        # "A string literal cannot contain NUL characters"), so strip them
+        # here rather than downstream at every consumer.
+        text = text.replace("\x00", "").strip()
+        return text or None
+    except Exception:
+        return None
 
 
 def fetch_papers(

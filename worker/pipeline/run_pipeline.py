@@ -16,7 +16,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from openalex import fetch_papers
+from openalex import fetch_papers, fetch_pdf_text
 from ingestion import chunk_text
 from embeddings import embed_documents
 from db import get_connection, upsert_paper, replace_chunks
@@ -51,7 +51,8 @@ def main() -> None:
     try:
         for paper in papers:
             upsert_paper(conn, topic, paper)
-            chunks = chunk_text(paper.get("abstract") or "")
+            full_text = fetch_pdf_text(paper["pdfUrl"]) if paper.get("pdfUrl") else None
+            chunks = chunk_text(full_text or paper.get("abstract") or "")
             if not chunks:
                 continue
             vectors = embed_documents(chunks)
@@ -61,7 +62,7 @@ def main() -> None:
 
         log_stage("rag:start")
         subqueries = generate_subqueries(topic)
-        findings = multi_query_retrieve(conn, topic, subqueries, top_k=14)
+        findings = multi_query_retrieve(conn, topic, subqueries, top_k=25)
         log_stage("rag:done")
     finally:
         conn.close()
